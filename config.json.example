@@ -1,0 +1,14 @@
+{
+    "mqtt": {
+        "broker": "mqtt://<yoursever.org>",
+        "port": 1883,
+        "user": "<username>",
+        "password": "<password>"
+    },
+    "matrix": {
+        "mx_home_server":"<yourMatrixServer>",
+        "mx_access_token":"<yourMatrixAccountAccessToken>",
+        "mx_user_id":"@<yourMatrixAccountName>:<yourMatrixServer>",
+        "mx_baseurl":"https://<yourMatrixServer>"
+    }
+}

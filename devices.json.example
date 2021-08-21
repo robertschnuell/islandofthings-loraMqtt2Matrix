@@ -1,0 +1,29 @@
+[
+  {
+    "DEV_ADD": "00000000",
+    "DEV_EUI": "0000000000000000",
+    "name": "<deviceName>",
+    "matrixSpace": "<roomId>:<yourMatrixServer>",
+    "logLevel": "high",
+    "debugRoom": "<roomId>:<yourMatrixServer>",
+    "active": false,
+    "payloadSize": 2,
+    "payloads": [
+      {
+        "type": "boolean",
+        "startByte": 3,
+        "roomId": "<roomId>:<yourMatrixServer>",
+        "name": "<someRandomName>",
+        "response": "<someRandomText>"
+      },
+      {
+        "type": "ascii",
+        "startByte": 0,
+        "len": 5,
+        "roomId": "!<roomId>:<yourMatrixServer>",
+        "name": "<someRandomName>"
+      }
+    ],
+    "configRoom": ""
+  }
+]
