@@ -32,3 +32,4 @@ config.json
 devices.json
 devices.json.bak
 yarn.lock
+config.json.bak

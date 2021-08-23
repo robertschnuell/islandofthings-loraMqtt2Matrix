@@ -2,14 +2,22 @@ const mqtt = require('mqtt')
 const matrix = require("matrix-js-sdk");
 const yaml = require("js-yaml")
 const fs = require('fs');
-
 const cors = require('cors');
+const express = require('express');
+const bodyParser = require('body-parser');
+const axios = require('axios')
+
 
 var devices = JSON.parse(fs.readFileSync('devices.json'));
 const config = JSON.parse(fs.readFileSync('config.json'));
 
-const express = require('express');
-const bodyParser = require('body-parser');
+const matrixHeader = {
+    headers: {
+      Authorization:
+        "Bearer " +
+        config.matrix.mx_access_token,
+    }
+  }
 
 
 
@@ -216,6 +224,7 @@ app.listen(port)
 
 app.post('/devices/add',verifyToken, (req, res) =>  {
     if(validToken(req.token)) {
+        createMatrixRoomsForNewDevice(req.body)
         devices.push(req.body);
         fs.writeFileSync('devices.json', JSON.stringify(devices, null, 2));
         res.sendStatus(201);
@@ -333,3 +342,295 @@ app.post('/devices/add',verifyToken, (req, res) =>  {
       res.status(403).json({"error":"Token missing"})
     }
   }
+
+
+  createMatrixRoomsForNewDevice({
+      name:"9bingSpace",
+      "payloads": [
+        {
+          "type": "boolean",
+          "startByte": 3,
+          "name": "motionDetected",
+          "response": "motion was detected"
+        },
+        {
+          "type": "ascii",
+          "startByte": 0,
+          "len": 5,
+          "name": "detection"
+        },
+        {
+          "type": "value",
+          "startByte": 3,
+          "len": 2,
+          "name": "distance"
+        }
+      ]
+    }
+  );
+
+  
+
+  function createMatrixRoomsForNewDevice(data) {
+    // create Space
+    // create different payload rooms
+    // create log room
+    // add payloadrooms to space
+    // add payloads to maproom
+
+    let mainSpaceConfig = { 
+        "name": data.name,
+        "preset": "public_chat",
+        "visibility": "public",
+    //    "room_alias_name":"iot-"+data.name,
+        "topic": "",
+        "creation_content": { "m.federate": false, "type": "m.space" },
+        "initial_state": [{
+            "type": "m.space.parent",
+            "content": {
+            "via": config.matrix.mx_home_server,
+            "canonical": true
+            },
+            "state_key": "space"
+        }, {
+            "type": "m.room.history_visibility",
+            "content": { "history_visibility": "world_readable" }
+        }],
+        "power_level_content_override": {
+            "ban": 50,
+            "events": {
+            "m.room.name": 50,
+            "m.room.power_levels": 50
+            },
+            "events_default": 0,
+            "invite": 50,
+            "kick": 50,
+            "notifications": {
+            "room": 20
+            },
+            "redact": 50,
+            "state_default": 50,
+            "users_default": 0
+    
+        }     
+    }
+
+    axios.post(config.matrix.mx_baseurl+ "/_matrix/client/r0/createRoom" ,mainSpaceConfig,matrixHeader)
+    .then( (response) => {
+      //console.log(response)
+        let deviceSpaceId = response.data.room_id;
+
+
+        data.matrixSpace = deviceSpaceId;
+
+
+        let responseArray = []
+        data.payloads.forEach( ele => {
+            let roomConf = {
+                "name":ele.name,
+                "visibility":"public",
+                "preset":"public_chat",
+          //      "room_alias_name":"dummyTest4",
+                "initial_state":[
+                    {
+                        "type":"m.space.parent",
+                        "content":{
+                            "via":[
+                            config.matrix.mx_home_server,
+                            ],
+                            "canonical":true
+                        },
+                        "state_key":deviceSpaceId
+                    },
+                    {
+                        "type":"m.room.history_visibility",
+                        "content":{
+                            "history_visibility":"world_readable"
+                        }
+                    }
+                ]
+            }
+            let newPromise = axios.post(config.matrix.mx_baseurl+ "/_matrix/client/r0/createRoom",roomConf,matrixHeader)
+            responseArray.push(newPromise)
+        })
+        axios.all(responseArray)
+        .then(axios.spread((...responses) => {
+            let putResponseArray = [];
+            responses.forEach( (res,i) => {
+                let roomId= res.data.room_id;
+                data.payloads[i].matrixRoomId = roomId;
+
+    
+                let putUrl = config.matrix.mx_baseurl+"/_matrix/client/r0/rooms/"+deviceSpaceId+"/state/m.space.child/"+roomId
+                let payloadPutConfig = {
+                    "via":[
+                        config.matrix.mx_home_server
+                    ],
+                    "suggested":true,
+                    "auto_join":false
+                }
+                let newPromise = axios.put(putUrl ,payloadPutConfig,matrixHeader)
+                putResponseArray.push(newPromise)
+            })
+
+            axios.all(putResponseArray)
+            .then(axios.spread((...putResponses) => {
+                putResponses.forEach(res => {
+                    console.log(res.data)
+                    console.log(data)
+        
+                })
+            }))
+            .catch(error => {console.log("-----errror"); console.log(error)})           
+
+
+
+        }))
+        .catch(error => {console.log("-----errror"); console.log(error)})
+
+
+/*
+        let payloadRoomConfig = {
+            "name":data.name+"-dummy",
+            "visibility":"public",
+            "preset":"public_chat",
+      //      "room_alias_name":"dummyTest4",
+            "initial_state":[
+                {
+                    "type":"m.space.parent",
+                    "content":{
+                        "via":[
+                        config.matrix.mx_home_server,
+                        ],
+                        "canonical":true
+                    },
+                    "state_key":deviceSpaceId
+                },
+                {
+                    "type":"m.room.history_visibility",
+                    "content":{
+                        "history_visibility":"world_readable"
+                    }
+                }
+            ]
+        }
+
+        axios.post(config.matrix.mx_baseurl+ "/_matrix/client/r0/createRoom" ,payloadRoomConfig,matrixHeader)
+        .then( (response) => {
+            //console.log(response)
+            let payloadSpaceId = response.data.room_id;
+
+            
+            let putUrl = config.matrix.mx_baseurl+"/_matrix/client/r0/rooms/"+deviceSpaceId+"/state/m.space.child/"+payloadSpaceId
+            let payloadPutConfig = {
+                "via":[
+                    "dev.medienhaus.udk-berlin.de"
+                ],
+                "suggested":true,
+                "auto_join":false
+            }
+            axios.put(putUrl ,payloadPutConfig,matrixHeader)
+            .then( (response) => {
+                console.log(response.data)
+
+            })
+            .catch( (error) => {
+                console.log("-------------------error-------------------");
+                console.log(error);
+            });
+
+        })
+        .catch(function (error) {
+        console.log("-------------------error-------------------");
+        console.log(error);
+        });
+*/
+
+    })
+    .catch(function (error) {
+      console.log("-------------------error-------------------");
+      console.log(error);
+    });
+  
+
+
+  }
+/*
+  dummyPayloadFunction(
+    {
+        name:"bing5Space",
+        "payloads": [
+        {
+            "type": "boolean",
+            "startByte": 3,
+            "name": "motionDetected",
+            "response": "motion was detected"
+        },
+        {
+            "type": "ascii",
+            "startByte": 0,
+            "len": 5,
+            "name": "detection"
+        },
+        {
+            "type": "value",
+            "startByte": 3,
+            "len": 2,
+            "name": "distance"
+        }
+        ]
+    }
+  )
+
+*/
+
+
+
+  function dummyPayloadFunction(data) {
+    let responseArray = []
+    data.payloads.forEach( ele => {
+        let roomConf = {
+            "name":ele.name,
+            "visibility":"public",
+            "preset":"public_chat",
+      //      "room_alias_name":"dummyTest4",
+            "initial_state":[
+                {
+                    "type":"m.space.parent",
+                    "content":{
+                        "via":[
+                        config.matrix.mx_home_server,
+                        ],
+                        "canonical":true
+                    },
+                    "state_key":"!UIZjReELEgpQbDsbAx:dev.medienhaus.udk-berlin.de"
+                },
+                {
+                    "type":"m.room.history_visibility",
+                    "content":{
+                        "history_visibility":"world_readable"
+                    }
+                }
+            ]
+        }
+        let newPromise = axios.post(config.matrix.mx_baseurl+ "/_matrix/client/r0/createRoom",roomConf,matrixHeader)
+        responseArray.push(newPromise)
+    })
+    axios.all(responseArray)
+    .then(axios.spread((...responses) => {
+        responses.forEach(res => {
+            let roomId= res.data.room_id;
+
+        })
+    }))
+    .catch(error => {console.log("-----errror"); console.log(error)})
+
+  }
+
+
+
+
+
+
+
+ 
